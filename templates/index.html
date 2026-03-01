@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SDL-FractureNet</title>
+
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Poppins:wght@700&display=swap" rel="stylesheet" />
+
+<style>
+  body {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 40%, #93c5fd 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 60px;
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(15px);
+    border-radius: 20px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+
+  .text-green { color: #10B981; }
+  .text-yellow { color: #FACC15; }
+  .text-red { color: #EF4444; }
+
+  button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+</style>
+</head>
+
+<body class="text-gray-900">
+
+<div class="max-w-5xl w-full mx-auto py-10 px-6 glass-card">
+
+  <div class="text-center mb-10">
+    <h1 class="text-3xl font-bold font-[Poppins] text-blue-700">
+      SDL-FractureNet: Bone Fracture Detection System
+    </h1>
+  </div>
+
+  <!-- Upload Form -->
+  <form id="upload-form" enctype="multipart/form-data"
+        class="rounded-xl border border-gray-300 bg-white bg-opacity-70 p-8 shadow-sm">
+
+    <div class="flex flex-col items-center gap-6 border-2 border-dashed border-gray-300 rounded-lg p-10 text-center hover:border-blue-400 transition">
+      <p class="text-lg font-bold">Drag & Drop your X-ray here</p>
+      <p class="text-sm text-gray-500">Supported: JPG, JPEG, PNG</p>
+      <input id="file-input" type="file" name="file" accept=".jpg,.jpeg,.png" required class="mt-2" />
+    </div>
+
+    <div class="flex justify-center">
+      <button type="submit"
+        class="mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-lg shadow-md hover:shadow-lg transition">
+        Upload & Analyze
+      </button>
+    </div>
+  </form>
+
+  <!-- Results Section -->
+  <div id="results" class="mt-12 hidden">
+    <h2 class="text-2xl font-bold mb-4 text-blue-700">Analysis Results</h2>
+
+    <div class="rounded-xl border border-gray-300 bg-white bg-opacity-80 p-6 shadow-sm">
+
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+
+        <div>
+          <h3 id="fracture-label" class="text-lg font-bold text-green">Analyzing...</h3>
+        </div>
+
+        <div id="confidence-badge"
+          class="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-1.5 shadow-inner">
+          <span class="text-sm text-gray-700">Confidence:</span>
+          <span id="confidence-value" class="text-lg font-bold text-green">--%</span>
+        </div>
+
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <div>
+          <h4 class="text-sm font-semibold text-center mb-2 text-gray-700">Original Image</h4>
+          <img id="original-img" class="rounded-lg w-full object-cover shadow-sm border border-gray-200" />
+        </div>
+
+        <div>
+          <h4 class="text-sm font-semibold text-center mb-2 text-gray-700">Analyzed Image</h4>
+          <img id="analyzed-img" class="rounded-lg w-full object-cover shadow-sm border border-gray-200" />
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById("upload-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const fileInput = document.getElementById("file-input");
+  if (!fileInput.files[0]) {
+    alert("Please select an image file first!");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+
+  const button = document.querySelector("button");
+  button.textContent = "Analyzing...";
+  button.disabled = true;
+
+  const response = await fetch("/predict", { method: "POST", body: formData });
+  const data = await response.json();
+
+  button.textContent = "Upload & Analyze";
+  button.disabled = false;
+
+  if (data.error) {
+    alert(data.error);
+    return;
+  }
+
+  document.getElementById("results").classList.remove("hidden");
+
+  document.getElementById("original-img").src = data.original_image;
+  document.getElementById("analyzed-img").src = data.analyzed_image;
+  document.getElementById("confidence-value").textContent = data.confidence + "%";
+
+  // CONFIDENCE COLOR LOGIC
+  const conf = parseFloat(data.confidence);
+  const confValue = document.getElementById("confidence-value");
+  confValue.classList.remove("text-green", "text-yellow", "text-red");
+
+  if (conf >= 90) confValue.classList.add("text-green");
+  else if (conf >= 70) confValue.classList.add("text-yellow");
+  else confValue.classList.add("text-red");
+
+  // FRACTURE LABEL LOGIC
+  const label = document.getElementById("fracture-label");
+  const desc = document.getElementById("fracture-description");
+
+  if (data.label === "Healthy") {
+    label.textContent = "No Fracture Detected";
+    label.classList.remove("text-red");
+    label.classList.add("text-green");
+
+    desc.textContent = "The X-ray shows no signs of fracture.";
+  }
+  else {
+    label.textContent = data.label + " Fracture Detected!";
+    label.classList.remove("text-green");
+    label.classList.add("text-red");
+
+    desc.textContent = `Detected fracture type: ${data.label}.`;
+  }
+
+  document.getElementById("results").scrollIntoView({ behavior: "smooth" });
+});
+</script>
+
+</body>
+</html>
